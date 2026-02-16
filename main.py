@@ -1,7 +1,7 @@
 from src.data import load_data, split_dataset
 from src.preprocessing import preprocess_data, feature_engineering_tfidf
-from src.models import train_model, evaluate_model, collect_misclassified_samples
-
+from src.models import train_model, evaluate_model, collect_misclassified_samples, plot_confusion_matrix
+import json
 
 class Pipeline:
     def __init__(self):
@@ -10,6 +10,7 @@ class Pipeline:
         self.test = None
         self.logistic_regression = None
         self.svm = None
+        self.best_model = None
 
     def run(self):
         # Load data
@@ -39,14 +40,30 @@ class Pipeline:
         self.svm = train_model('linear_svm', self.X_train, self.y_train)
 
         # Evaluate models on the test set
-        self.lr_metrics = evaluate_model(self.logistic_regression, self.X_test, self.y_test)
-        self.svm_metrics = evaluate_model(self.svm, self.X_test, self.y_test)
+        self.lr_predictions, self.lr_metrics = evaluate_model(self.logistic_regression, self.X_test, self.y_test)
+        self.svm_predictions, self.svm_metrics = evaluate_model(self.svm, self.X_test, self.y_test)
 
-        # Collect misclassified samples
-        self.lr_misclassified = collect_misclassified_samples(self.logistic_regression, self.X_test, self.y_test)
-        self.svm_misclassified = collect_misclassified_samples(self.svm, self.X_test, self.y_test)
+        # Read which model performed better based on the macro_f1 metric
+        self.best_model = self.logistic_regression if self.lr_metrics['macro_f1'] > self.svm_metrics['macro_f1'] else self.svm
 
+        # Collect misclassified samples on the best performing model
+        self.best_misclassified = collect_misclassified_samples(self.best_model, self.X_test, self.y_test, n_samples =10)
 
+        # Collect misclassified for both models for creation of error categories
+        self.lr_misclassified = collect_misclassified_samples(self.logistic_regression, self.X_test, self.y_test, n_samples=20)
+        self.svm_misclassified = collect_misclassified_samples(self.svm, self.X_test, self.y_test, n_samples=20)
+
+        self.predictions = {
+            "Logistic Regression": pipeline.lr_predictions,
+            "Linear SVM": pipeline.svm_predictions
+        }
+        
+        for model_name, y_pred in self.predictions.items():
+            plot_confusion_matrix(
+                pipeline.y_test, 
+                y_pred, 
+                f"Confusion Matrix – {model_name}"
+            )
 
 
 if __name__ == "__main__":
@@ -57,5 +74,9 @@ if __name__ == "__main__":
     print(pipeline.X_dev[:5])
     print("Logistic Regression Metrics:", pipeline.lr_metrics)
     print("SVM Metrics:", pipeline.svm_metrics)
-    pipeline.lr_misclassified.to_csv('logistic_regression_misclassified.csv', index=False)
-    pipeline.svm_misclassified.to_csv('svm_misclassified.csv', index=False)
+    with open('logistic_regression_metrics.json', 'w') as f:
+        json.dump(pipeline.lr_metrics, f, indent=4)
+
+    with open('svm_metrics.json', 'w') as f:
+        json.dump(pipeline.svm_metrics, f, indent=4)
+    pipeline.best_misclassified.to_csv('logistic_regression_misclassified.csv', index=False)

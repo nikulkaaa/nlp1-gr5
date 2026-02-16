@@ -49,7 +49,7 @@ def feature_engineering_tfidf(
         X = vectorizer.fit_transform(text_data).toarray()
         return X, vectorizer
     else:
-        # Subsequent calls: just transform using existing vectorizer
+        # Subsequent calls: transform using existing vectorizer
         X = vectorizer.transform(text_data).toarray()
         return X
 

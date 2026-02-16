@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias, Tuple
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 import numpy as np
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 if TYPE_CHECKING:
     PandasSeriesAny: TypeAlias = pd.Series[Any]
@@ -40,7 +42,7 @@ def evaluate_model(
     model: LogisticRegression | LinearSVC,
     X_test: np.ndarray,
     y_test: PandasSeriesAny | np.ndarray,
-) -> dict[str, float]:
+) -> Tuple [np.ndarray, dict[str, float]]:
     """
     Evaluate the performance of a trained model on the test dataset.
     
@@ -54,7 +56,26 @@ def evaluate_model(
         "accuracy": accuracy_score(y_test, y_pred),
         "macro_f1": f1_score(y_test, y_pred, average="macro"),
     }
-    return metrics
+    return y_pred, metrics
+
+def plot_confusion_matrix(y_true, y_pred, title):
+    cm = confusion_matrix(y_true, y_pred, normalize="true")
+    
+    class_labels = ["World", "Sports", "Business", "Sci/Tech"]
+    
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt=".2f",
+        cmap="Blues",
+        xticklabels=class_labels,
+        yticklabels=class_labels
+    )
+    plt.xlabel("Prediction")
+    plt.ylabel("Ground Truth")
+    plt.title(title)
+    plt.tight_layout()
+    plt.show()
 
 def collect_misclassified_samples(
     model: LogisticRegression | LinearSVC,
@@ -65,6 +86,8 @@ def collect_misclassified_samples(
     text_column: str = "description",
     n_samples: int = 20,
     random_state: int = 1337,
+    include_text: bool = True,
+    include_features: bool = False,
 ) -> pd.DataFrame:
     """
     Collect misclassified samples from the test dataset.
@@ -76,6 +99,11 @@ def collect_misclassified_samples(
     :param text_column: Column in test_df that contains the raw text (defaults to "description").
     :param n_samples: Number of misclassified examples to return (default 20). If fewer exist, returns all.
     :param random_state: Seed used for sampling.
+    :param include_text: When True (default), include the original text column for easier inspection.
+                         If test_df is not provided, this function will attempt to load the AG News test split
+                         from Hugging Face (`sh0416/ag_news`) and use it as the source of text.
+    :param include_features: When True, include numeric feature vectors for the misclassified rows.
+                             Defaults to False to avoid writing huge TF-IDF arrays to CSV.
     :return: A DataFrame containing misclassified samples with labels and optional text context.
     """
     # Predict labels for the test set
@@ -89,7 +117,12 @@ def collect_misclassified_samples(
 
     # If no misclassified samples, return an empty DataFrame with the expected columns
     if len(misclassified_indices) == 0:
-        return pd.DataFrame(columns=["pos", "true_label", "predicted_label"])
+        base_cols = ["pos", "true_label", "predicted_label"]
+        if include_text:
+            base_cols.append(text_column)
+        if include_features:
+            base_cols.append("features")
+        return pd.DataFrame(columns=base_cols)
 
     # If n_samples is specified and there are more misclassified samples than n_samples, randomly sample n_samples indices
     if n_samples is not None and n_samples > 0 and len(misclassified_indices) > n_samples:
@@ -106,20 +139,50 @@ def collect_misclassified_samples(
         }
     )
 
-    # If a test_df is provided, include the corresponding text for the misclassified samples. Otherwise, keep numeric features.
-    if test_df is not None:
-        if len(test_df) != len(X_test):
-            raise ValueError(
-                "test_df must be aligned with X_test/y_test (same number of rows). "
-                f"Got len(test_df)={len(test_df)} and len(X_test)={len(X_test)}"
-            )
-        if text_column not in test_df.columns:
-            raise ValueError(f"test_df does not contain column '{text_column}'")
+    # Include text for inspection (preferred).
+    if include_text:
+        resolved_test_df: pd.DataFrame | None = test_df
 
-        result["row_index"] = test_df.index.to_numpy()[misclassified_indices]
-        result[text_column] = test_df[text_column].to_numpy()[misclassified_indices]
-    else:
-        # Keep numeric features available when no raw-text DataFrame is provided.
+        # If the caller didn't provide a DataFrame, try to reconstruct the AG News test split.
+        # This keeps the call-site unchanged while avoiding dumping TF-IDF vectors.
+        if resolved_test_df is None:
+            try:
+                from datasets import load_dataset  # type: ignore
+
+                try:
+                    ds = load_dataset("sh0416/ag_news")
+                    test_ds = ds["test"]
+                except Exception:
+                    data_files = {"test": "test.jsonl"}
+                    ds = load_dataset("json", data_files=data_files, repo_id="sh0416/ag_news")
+                    test_ds = ds["test"]
+
+                to_pandas_result = test_ds.to_pandas()
+                if isinstance(to_pandas_result, pd.DataFrame):
+                    resolved_test_df = to_pandas_result
+                else:
+                    # Some `datasets` versions type this as an iterator of DataFrames.
+                    resolved_test_df = pd.concat(list(to_pandas_result), ignore_index=True)
+
+                if text_column not in resolved_test_df.columns and "text" in resolved_test_df.columns:
+                    resolved_test_df.rename(columns={"text": text_column}, inplace=True)
+            except Exception:
+                resolved_test_df = None
+
+        if resolved_test_df is not None:
+            if len(resolved_test_df) != len(X_test):
+                raise ValueError(
+                    "test_df must be aligned with X_test/y_test (same number of rows). "
+                    f"Got len(test_df)={len(resolved_test_df)} and len(X_test)={len(X_test)}"
+                )
+            if text_column not in resolved_test_df.columns:
+                raise ValueError(f"test_df does not contain column '{text_column}'")
+
+            result["row_index"] = resolved_test_df.index.to_numpy()[misclassified_indices]
+            result[text_column] = resolved_test_df[text_column].to_numpy()[misclassified_indices]
+
+    # Optionally include numeric feature vectors (off by default).
+    if include_features:
         result["features"] = list(X_test[misclassified_indices])
 
     return result
