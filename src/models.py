@@ -75,8 +75,9 @@ def plot_confusion_matrix(y_true, y_pred, title):
     plt.ylabel("Ground Truth")
     plt.title(title)
     plt.tight_layout()
-    plt.show()
-
+    plt.savefig(f"results/{title}.png")
+    plt.close()
+    
 def collect_misclassified_samples(
     model: LogisticRegression | LinearSVC,
     X_test: np.ndarray,

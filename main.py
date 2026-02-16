@@ -11,6 +11,7 @@ class Pipeline:
         self.logistic_regression = None
         self.svm = None
         self.best_model = None
+        self.best_model_name = None
 
     def run(self):
         # Load data
@@ -45,6 +46,7 @@ class Pipeline:
 
         # Read which model performed better based on the macro_f1 metric
         self.best_model = self.logistic_regression if self.lr_metrics['macro_f1'] > self.svm_metrics['macro_f1'] else self.svm
+        self.best_model_name = "lr" if self.lr_metrics['macro_f1'] > self.svm_metrics['macro_f1'] else "svm"
 
         # Collect misclassified samples on the best performing model
         self.best_misclassified = collect_misclassified_samples(self.best_model, self.X_test, self.y_test, n_samples =10)
@@ -74,9 +76,12 @@ if __name__ == "__main__":
     print(pipeline.X_dev[:5])
     print("Logistic Regression Metrics:", pipeline.lr_metrics)
     print("SVM Metrics:", pipeline.svm_metrics)
-    with open('logistic_regression_metrics.json', 'w') as f:
+    with open('results/logistic_regression_metrics.json', 'w') as f:
         json.dump(pipeline.lr_metrics, f, indent=4)
 
-    with open('svm_metrics.json', 'w') as f:
+    with open('results/svm_metrics.json', 'w') as f:
         json.dump(pipeline.svm_metrics, f, indent=4)
-    pipeline.best_misclassified.to_csv('logistic_regression_misclassified.csv', index=False)
+    pipeline.best_misclassified.to_csv(f'results/best_model_{pipeline.best_model_name}_misclassified.csv', index=False)
+
+    pipeline.lr_misclassified.to_csv('results/logistic_regression_misclassified.csv', index=False)
+    pipeline.svm_misclassified.to_csv('results/svm_misclassified.csv', index=False)
