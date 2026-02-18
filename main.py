@@ -22,7 +22,8 @@ class Pipeline:
 
     def run(self) -> None:
         """
-        Execute the entire machine learning pipeline, including data loading, preprocessing, model training, evaluation, and analysis of misclassified samples.
+        Execute the entire machine learning pipeline, including data loading, 
+        preprocessing, model training, evaluation, and analysis of misclassified samples.
 
         :return: None
         """
@@ -38,23 +39,23 @@ class Pipeline:
         self.test = preprocess_data(self.test)
 
         # Feature engineering using TF-IDF
-        self.X_train, vectorizer = feature_engineering_tfidf(self.train, column_name="description")
+        self.X_train_tfidf, vectorizer = feature_engineering_tfidf(self.train, column_name="description")
         self.y_train = self.train['label']
 
-        self.X_dev = feature_engineering_tfidf(self.dev, column_name="description", vectorizer=vectorizer)
+        self.X_dev_tfidf = feature_engineering_tfidf(self.dev, column_name="description", vectorizer=vectorizer)
         self.y_dev = self.dev['label']
 
-        self.X_test = feature_engineering_tfidf(self.test, column_name="description", vectorizer=vectorizer)
+        self.X_test_tfidf = feature_engineering_tfidf(self.test, column_name="description", vectorizer=vectorizer)
         self.y_test = self.test['label']
 
         # Train logistic regression model
-        self.logistic_regression = train_model('logistic_regression', self.X_train, self.y_train)
+        self.logistic_regression = train_model('logistic_regression', self.X_train_tfidf, self.y_train)
         # Train SVM model
-        self.svm = train_model('linear_svm', self.X_train, self.y_train)
+        self.svm = train_model('linear_svm', self.X_train_tfidf, self.y_train)
 
         # Evaluate models on the test set
-        self.lr_predictions, self.lr_metrics = evaluate_model(self.logistic_regression, self.X_test, self.y_test)
-        self.svm_predictions, self.svm_metrics = evaluate_model(self.svm, self.X_test, self.y_test)
+        self.lr_predictions, self.lr_metrics = evaluate_model(self.logistic_regression, self.X_test_tfidf, self.y_test)
+        self.svm_predictions, self.svm_metrics = evaluate_model(self.svm, self.X_test_tfidf, self.y_test)
 
         # Read which model performed better based on the macro_f1 metric
         self.best_model = self.logistic_regression if self.lr_metrics['macro_f1'] > self.svm_metrics['macro_f1'] else self.svm

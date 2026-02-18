@@ -10,10 +10,11 @@ import torch
 
 if TYPE_CHECKING:
     PandasSeriesAny: TypeAlias = pd.Series[Any]
-else:
-    PandasSeriesAny: TypeAlias = pd.Series
+# else:
+#     PandasSeriesAny: TypeAlias = pd.Series
 
-def define_text_classification_cnn():
+
+def build_text_classification_cnn() -> torch.nn.Module:
     """Define a simple CNN architecture for text classification."""
     torch.manual_seed(1337)  # For reproducibility
     vocab_size = 10000  # Size of the vocabulary    
@@ -28,6 +29,24 @@ def define_text_classification_cnn():
         torch.nn.Flatten(),
         torch.nn.Linear(128 * 48, 4)  # Assuming input sequences of length 100
     )
+    return model
+
+def build_lstm_model() -> torch.nn.Module:
+    """Define a simple LSTM architecture for text classification."""
+    torch.manual_seed(1337)  # For reproducibility
+    vocab_size = 10000  # Size of the vocabulary    
+    embedding_dim = 100  # Dimension of word embeddings
+    hidden_dim = 128  # Dimension of LSTM hidden states
+
+    # Define the model architecture
+    model = torch.nn.Sequential(
+        torch.nn.Embedding(vocab_size, embedding_dim),
+        torch.nn.LSTM(embedding_dim, hidden_dim, batch_first=True),
+        torch.nn.Flatten(),
+        torch.nn.Linear(hidden_dim * 100, 4) 
+    )
+    return model
+
 def train_model(
     model_name: str,
     X_train: np.ndarray,
@@ -46,6 +65,10 @@ def train_model(
         model = LogisticRegression()
     elif model_name == 'linear_svm':
         model = LinearSVC()
+    elif model_name == 'text_cnn':
+        model = build_text_classification_cnn()
+    elif model_name == 'lstm':
+        model = build_lstm_model()
     else:
         raise ValueError(f"Unsupported model type: {model_name}")
     

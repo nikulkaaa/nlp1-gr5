@@ -17,6 +17,15 @@ def clean_text(text: str) -> str:
     text = re.sub(r'[^a-z0-9\s]', '', text)
     return text.strip()
 
+def tokenize_text(text: str) -> list[str]:
+    """
+    Tokenizes the input text into a list of words.
+    
+    :param text: The input text to tokenize.
+    :return: A list of tokens (words).
+    """
+    return text.split()
+
 def preprocess_data(df):
     """
     Preprocesses the input DataFrame by tokenizing the 'description' column and creating a new 'tokens' column.
@@ -26,6 +35,8 @@ def preprocess_data(df):
     """
     # Clean the 'description' column
     df['description'] = df['description'].apply(clean_text)
+    # Tokenize the cleaned 'description' column
+    df['tokens'] = df['description'].apply(tokenize_text)
     return df
 
 def feature_engineering_tfidf(
